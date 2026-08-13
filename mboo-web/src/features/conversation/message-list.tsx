@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ToolResultDetail } from "@/lib/session-types";
 import type { ChatMessage, ToolResultLoader } from "@/features/agent-run/message-model";
 import { MessageBubble, RunningNotice } from "@/features/conversation/message-bubble";
+import TypewriterEffectCanvas from "@/features/conversation/typewriter-effect-canvas";
 import styles from "./message-list.module.css";
 
 const NEAR_BOTTOM_PX = 120;
@@ -182,6 +183,11 @@ export const MessageList = memo(function MessageList({
           <RunningNotice activityMessage={activityMessage} onStop={onStop} />
         </div>
       ) : null}
+      <TypewriterEffectCanvas
+        sessionId={sessionId}
+        scrollerRef={scrollerRef}
+        isStreaming={isRunning}
+      />
     </div>
   );
 });

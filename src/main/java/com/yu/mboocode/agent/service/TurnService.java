@@ -334,6 +334,7 @@ public class TurnService {
                         if (!runtime.claimAssistantTerminal(TurnTerminalState.COMPLETE)) {
                             return;
                         }
+                        //todo chatResponse.aiMessage() 其他内容处理 机制确认
                         emitEvent(sink, () -> sessionEventStore.appendSession(sessionTurn.transcriptUri(), SessionEvent.builder()
                                 .eventId(IdUtil.getSnowflakeNextIdStr())
                                 .sessionId(sessionTurn.sessionId())

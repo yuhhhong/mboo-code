@@ -56,7 +56,7 @@ public class SessionService extends ServiceImpl<SessionsMapper, Sessions> {
     public Sessions createSession(String workspacePath, PermissionMode permissionMode) {
         Sessions session = new Sessions();
         session.setId(IdUtil.getSnowflakeNextIdStr());
-        session.setTitle("新会话");
+        session.setTitle("新会话"); //todo 后续看看用大模型的回答
         session.setStatus(Sessions.StatusEnum.ACTIVE.getCode());
         JSONObject metadata = new JSONObject();
         if (permissionMode != null) {

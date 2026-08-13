@@ -1043,30 +1043,20 @@ textarea {
   font-family: var(--font-mono);
 }
 
-.mboo-markdown .mboo-md-stream-caret {
-  display: inline-block;
+.mboo-markdown .typewriter-cursor {
+  border-right-color: var(--accent);
   width: 0.45em;
   height: 1em;
-  margin-left: 0.12em;
-  vertical-align: -0.12em;
-  background: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent-strong) 35%, white);
-  animation: mboo-md-caret 1s steps(1, end) infinite;
-}
-
-@keyframes mboo-md-caret {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mboo-markdown .markstream-react *,
-  .mboo-markdown .mboo-md-stream-caret {
+  .mboo-markdown .typewriter-cursor {
     animation: none !important;
     transition: none !important;
   }
 
-  .mboo-markdown .mboo-md-stream-caret {
+  .mboo-markdown .typewriter-cursor {
     opacity: 1;
   }
 }

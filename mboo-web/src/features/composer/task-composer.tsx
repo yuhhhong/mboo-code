@@ -22,6 +22,7 @@ function reasoningOptionLabel(value: string) {
     low: "低",
     medium: "中",
     high: "高",
+    xhigh: "极高",
     max: "最高",
   };
   return labels[value.toLowerCase()] || value;

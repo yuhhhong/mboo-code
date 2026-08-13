@@ -22,6 +22,7 @@ import type { SessionConfirmAction, SessionInfo as FeatureSessionInfo, SessionLi
 import { ToolApprovalCard } from "@/features/tools/tool-approval-card";
 import { readSessionEventStream } from "@/lib/session-stream";
 import { getSessionRuntime, sessionRuntimeStore, useSessionRuntimeStore } from "@/lib/session-runtime-store";
+import { typewriterStore } from "@/features/conversation/typewriter-store";
 import type {
   AssistantMessageState,
   ChatReq,
@@ -606,6 +607,7 @@ export default function Home() {
     const isNewSessionBind = previousKey === PENDING_SESSION_KEY;
     if (isNewSessionBind) {
       sessionRuntimeStore.getState().move(PENDING_SESSION_KEY, nextSessionId);
+      typewriterStore.getState().moveSession(PENDING_SESSION_KEY, nextSessionId);
       const pendingLocalUserId = pendingLocalUserIdBySessionRef.current[PENDING_SESSION_KEY];
       if (pendingLocalUserId) {
         pendingLocalUserIdBySessionRef.current[nextSessionId] = pendingLocalUserId;
@@ -1004,6 +1006,8 @@ export default function Home() {
 
       if (event.type === "ASSISTANT_MESSAGE_DELTA") {
         const messageId = event.payload.messageId || event.eventId;
+        // 触发打字机粒子特效：text token 到达时爆发粒子
+        typewriterStore.getState().onToken(targetKey, null);
         appendAssistantDelta(targetKey, messageId, event.payload.text || "", event);
         return;
       }

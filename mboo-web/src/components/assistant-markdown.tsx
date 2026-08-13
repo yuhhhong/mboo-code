@@ -324,7 +324,7 @@ const AssistantMarkdown = memo(function AssistantMarkdown({
           content={content}
           customId={customId}
           final={!isStreaming}
-          typewriter={false}
+          typewriter={isStreaming}
           fade={false}
           smoothStreaming={isStreaming ? "auto" : false}
           maxLiveNodes={isStreaming ? 0 : undefined}
@@ -333,12 +333,9 @@ const AssistantMarkdown = memo(function AssistantMarkdown({
           streamingComponents={streamingComponents}
         />
         {isStreaming ? (
-          <>
-            <span className="mboo-md-stream-caret" aria-hidden />
-            <span className="sr-only" role="status">
-              正在生成回复
-            </span>
-          </>
+          <span className="sr-only" role="status">
+            正在生成回复
+          </span>
         ) : null}
       </div>
     </MarkdownActionProvider>
