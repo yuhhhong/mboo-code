@@ -23,6 +23,7 @@ import { ToolApprovalCard } from "@/features/tools/tool-approval-card";
 import { readSessionEventStream } from "@/lib/session-stream";
 import { getSessionRuntime, sessionRuntimeStore, useSessionRuntimeStore } from "@/lib/session-runtime-store";
 import { typewriterStore } from "@/features/conversation/typewriter-store";
+import { selectWorkspacePath, type DesktopWorkspaceBridge } from "@/lib/workspace-selection";
 import type {
   AssistantMessageState,
   ChatReq,
@@ -1718,16 +1719,20 @@ export default function Home() {
     setIsSelectingWorkspace(true);
 
     try {
-      const response = await fetch("/api/workspace/select-directory", {
-        method: "POST",
-        cache: "no-store",
+      const desktopBridge = (window as Window & { mbooDesktop?: DesktopWorkspaceBridge }).mbooDesktop;
+      const workspacePath = await selectWorkspacePath(desktopBridge, async () => {
+        const response = await fetch("/api/workspace/select-directory", {
+          method: "POST",
+          cache: "no-store",
+        });
+        const result = await readApiData<WorkspaceSelectResp>(response);
+        return result?.workspacePath ?? undefined;
       });
-      const result = await readApiData<WorkspaceSelectResp>(response);
       if (workspaceSelectionVersionRef.current !== requestVersion || currentSessionIdRef.current) {
         return;
       }
-      if (result?.workspacePath) {
-        setPendingWorkspacePath(result.workspacePath);
+      if (workspacePath) {
+        setPendingWorkspacePath(workspacePath);
       }
     } catch (error) {
       if (workspaceSelectionVersionRef.current === requestVersion) {

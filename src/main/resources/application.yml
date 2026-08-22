@@ -12,10 +12,16 @@ spring:
     multipart:
       max-file-size: 4MB
       max-request-size: 6MB
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
 
 server:
   tomcat:
     max-part-count: 300
+  shutdown: graceful
+
+mboo:
+  version: ${MBOO_VERSION:0.0.1-SNAPSHOT}
 
 mybatis-plus:
   configuration:

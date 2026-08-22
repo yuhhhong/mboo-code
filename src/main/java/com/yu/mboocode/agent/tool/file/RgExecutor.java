@@ -4,6 +4,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,12 +22,12 @@ public class RgExecutor {
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final Version MIN_VERSION = new Version(13, 0, 0);
     private static final Pattern VERSION_PATTERN = Pattern.compile("ripgrep\\s+(\\d+)\\.(\\d+)\\.(\\d+)");
-    private volatile boolean versionChecked;
+    private volatile String verifiedExecutable;
 
     public RgResult execute(List<String> arguments, FileToolErrorCode invalidExpressionCode) {
-        ensureVersion();
+        String executable = ensureVersion();
         List<String> command = new ArrayList<>(arguments.size() + 1);
-        command.add("rg");
+        command.add(executable);
         command.addAll(arguments);
         Process process;
         try {
@@ -65,13 +68,17 @@ public class RgExecutor {
         }
     }
 
-    private synchronized void ensureVersion() {
-        if (versionChecked) {
-            return;
+    /**
+     * 解析并校验本次实际执行的 rg，避免桌面包预检随包二进制而搜索阶段意外回退到系统 PATH。
+     */
+    private synchronized String ensureVersion() {
+        String executable = resolveExecutable();
+        if (executable.equals(verifiedExecutable)) {
+            return executable;
         }
         Process process;
         try {
-            process = new ProcessBuilder("rg", "--version").redirectErrorStream(true).start();
+            process = new ProcessBuilder(executable, "--version").redirectErrorStream(true).start();
             if (!process.waitFor(5, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new FileToolException(FileToolErrorCode.RG_TIMEOUT, "检查 ripgrep 版本超时");
@@ -85,7 +92,8 @@ public class RgExecutor {
             if (actual.compareTo(MIN_VERSION) < 0) {
                 throw new FileToolException(FileToolErrorCode.DEPENDENCY_VERSION_UNSUPPORTED, "ripgrep 版本不满足要求，最低版本 13.0.0，当前版本 " + actual);
             }
-            versionChecked = true;
+            verifiedExecutable = executable;
+            return executable;
         } catch (FileToolException e) {
             throw e;
         } catch (IOException e) {
@@ -93,6 +101,31 @@ public class RgExecutor {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new FileToolException(FileToolErrorCode.RG_EXECUTION_FAILED, "检查 ripgrep 版本被中断", e);
+        }
+    }
+
+    /**
+     * 在桌面模式优先使用 Electron 明确传入的随包路径，未配置时才维持浏览器和开发模式的 PATH 兼容。
+     */
+    private String resolveExecutable() {
+        String configuredPath = System.getProperty("mboo.rgPath");
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return "rg";
+        }
+        try {
+            Path executable = Path.of(configuredPath);
+            if (!executable.isAbsolute()) {
+                throw new FileToolException(FileToolErrorCode.RG_NOT_FOUND, "桌面 ripgrep 路径必须是绝对路径");
+            }
+            if (!Files.isRegularFile(executable)) {
+                throw new FileToolException(FileToolErrorCode.RG_NOT_FOUND, "桌面随包 ripgrep 文件不存在");
+            }
+            if (!Files.isExecutable(executable)) {
+                throw new FileToolException(FileToolErrorCode.RG_NOT_FOUND, "桌面随包 ripgrep 不可执行");
+            }
+            return executable.toString();
+        } catch (InvalidPathException e) {
+            throw new FileToolException(FileToolErrorCode.RG_NOT_FOUND, "桌面 ripgrep 路径无效", e);
         }
     }
 

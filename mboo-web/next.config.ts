@@ -32,6 +32,8 @@ const optionalPeerAliases = {
 };
 
 const nextConfig: NextConfig = {
+  // 桌面生产包由内置 Node.js 直接运行 standalone server.js，避免目标机器依赖 npm 或 next 命令。
+  output: "standalone",
   // 允许本机局域网 IP 访问开发服务（含 /_next/webpack-hmr）
   allowedDevOrigins: collectLanDevOrigins(),
   reactCompiler: true,

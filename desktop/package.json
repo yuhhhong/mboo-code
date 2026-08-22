@@ -1,0 +1,26 @@
+{
+  "name": "mboo-code-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsx src/main/index.ts",
+    "test": "tsx --test test/*.test.ts",
+    "prepare:runtime": "tsx scripts/prepare-runtime.ts",
+    "verify:runtime": "tsx scripts/verify-runtime.ts",
+    "assemble:resources": "tsx scripts/assemble-resources.ts",
+    "package:target": "tsx scripts/package-target.ts",
+    "package:win:x64": "npm run package:target -- win32-x64",
+    "package:mac:x64": "npm run package:target -- darwin-x64",
+    "package:mac:arm64": "npm run package:target -- darwin-arm64",
+    "package": "npm run package:target"
+  },
+  "devDependencies": {
+    "electron": "43.4.1",
+    "electron-builder": "26.15.3",
+    "tsx": "4.23.12",
+    "typescript": "^5.9.3"
+  }
+}

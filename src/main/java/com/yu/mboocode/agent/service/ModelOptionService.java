@@ -46,8 +46,15 @@ public class ModelOptionService {
     public void initialize() {
         String apiKey = StrUtil.trim(setting.getApiKey());
         String baseUrl = StrUtil.removeSuffix(StrUtil.trim(setting.getBaseUrl()), "/");
+        if (StrUtil.isBlank(apiKey) && StrUtil.isBlank(baseUrl)) {
+            // 首次安装允许先启动并进入配置流程；已有配置的供应商错误仍在后续请求中明确失败。
+            log.warn("模型服务尚未配置，跳过启动时模型列表加载");
+            modelNames = List.of();
+            modelInfoMap = Map.of();
+            return;
+        }
         if (StrUtil.isBlank(apiKey) || StrUtil.isBlank(baseUrl)) {
-            throw new IllegalStateException("模型服务未配置，请在 setting.json 中填写 api_key 和 base_url");
+            throw new IllegalStateException("模型服务配置不完整，请同时填写 api_key 和 base_url");
         }
         Map<String, ModelInfo> metadata = modelMetadataService.loadMetadata();
 
