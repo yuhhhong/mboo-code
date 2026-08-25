@@ -46,7 +46,7 @@ ELECTRON_MIRROR=https://your-approved-mirror.example/electron/ npm run package:m
 
 镜像必须提供与 Electron 版本和平台架构对应的官方归档；构建失败时应恢复默认源或改用经过团队验证的镜像。
 
-应用图标源文件位于 `desktop/resources/icons/mboo-code.png`。macOS 使用仓库内预生成的 `mboo-code.icns`，Windows 构建使用 PNG 源生成对应的 ICO 资源；修改图标后需要重新封包，已安装的旧 App 不会自动更新图标缓存。
+应用图标资源位于 `desktop/resources/icons/`：`mboo-code.png` 是通用 1024 × 1024 源图，`mboo-code.icns` 用于 macOS，`mboo-code.ico` 用于 Windows。修改图标后需要重新封包，已安装的旧 App 不会自动更新图标缓存。
 
 运行时归档（Java、Node.js、`rg`）仍由 `resources/runtime/manifest.json` 固定来源和 SHA-256。构建脚本会优先复用 `desktop/.runtime-archives/<target>` 缓存，并在使用前重新校验；在公司网络中应使用 HTTPS 代理或提供内容完全一致的内部缓存，不应关闭校验或使用未知镜像替换归档。
 

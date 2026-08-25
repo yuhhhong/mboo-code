@@ -72,7 +72,7 @@ module.exports = {
   },
   win: {
     target: "nsis",
-    icon: "resources/icons/mboo-code.png",
+    icon: "resources/icons/mboo-code.ico",
     forceCodeSigning: isSignedBuild,
     artifactName: "Mboo-Code-${version}-win-${arch}.${ext}",
   },
