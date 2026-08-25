@@ -25,6 +25,9 @@ public class ChatMemory {
     @Schema(description = "早期会话历史摘要")
     private String summaryText;
 
+    @Schema(description = "版本化的上下文保留工具结果 JSON；第一版保存最新 Skill 激活结果")
+    private String retainedToolResultsJson;
+
     @Schema(description = "上一次聊天实际使用的模型 ID；usage 缺失时仍保留，供摘要模型选择")
     private String lastModelId;
 

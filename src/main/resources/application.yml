@@ -3,19 +3,19 @@ spring:
     name: mboo-code
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:${user.home}/.mboo/mboo_data.sqlite
+    url: jdbc:sqlite:${mboo.appDataDir:${user.home}/.mboo}/mboo_data.sqlite
   sql:
     init:
       mode: always
       schema-locations: classpath:db/sqlite/schema.sql
-  lifecycle:
-    timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      max-file-size: 4MB
+      max-request-size: 6MB
 
 server:
-  shutdown: graceful
-
-mboo:
-  version: ${MBOO_VERSION:0.0.1-SNAPSHOT}
+  tomcat:
+    max-part-count: 300
 
 mybatis-plus:
   configuration:

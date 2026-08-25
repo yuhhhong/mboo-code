@@ -11,7 +11,7 @@ import com.yu.mboocode.agent.enums.SessionEventSource;
 import com.yu.mboocode.agent.enums.SessionEventType;
 import com.yu.mboocode.agent.model.SessionEvent;
 import com.yu.mboocode.agent.model.payload.SessionEventPayload;
-import com.yu.mboocode.common.util.CommonUtil;
+import com.yu.mboocode.common.util.AppDataPaths;
 import com.yu.mboocode.common.util.DateTimeUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -49,7 +49,7 @@ public class SessionEventStore {
         if (path.isAbsolute()) { //判断是绝对路径，直接返回
             return path;
         }
-        return Path.of(CommonUtil.getAppDataDir()).resolve(path).normalize();
+        return AppDataPaths.root().resolve(path).normalize();
     }
 
     private final SegmentLock<Lock> fileLocks = LockUtil.createLazySegmentLock(64); // 64 段够本地单机；会话多可调到 128/256

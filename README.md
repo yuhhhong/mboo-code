@@ -246,7 +246,7 @@ MBOO_API_BASE_URL="http://localhost:8080" npm run dev
 
 配置只在后端启动时读取，修改后需要重启后端。
 
-可以通过 JVM 系统属性修改应用数据目录。使用 Gradle 启动时，可设置 `JAVA_TOOL_OPTIONS`：
+应用私有数据统一从数据根目录解析，包括 SQLite、配置、会话日志、工具结果、默认工作区和内置 Skill 脚本缓存。默认根目录为用户目录下的 `.mboo`，可以通过 JVM 系统属性 `mboo.appDataDir` 修改。使用 Gradle 启动时，可设置 `JAVA_TOOL_OPTIONS`：
 
 Windows PowerShell：
 
@@ -267,6 +267,8 @@ JAVA_TOOL_OPTIONS="-Dmboo.appDataDir=/path/to/mboo-data" ./gradlew bootRun
 java -Dmboo.appDataDir=/path/to/mboo-data -jar build/libs/mboo-code-0.0.1-SNAPSHOT.jar
 ```
 
+应用启动时会把数据根目录规范化为真实绝对路径；目录无法创建、目标不是目录或路径无效时会直接终止。用户级 Skill 仍固定从 `~/.mboo/skills` 和 `~/.agents/skills` 发现，不随 `mboo.appDataDir` 改变。
+
 ## 7. 本地数据
 
 默认数据保存在用户目录的 `.mboo` 下：
@@ -275,10 +277,14 @@ java -Dmboo.appDataDir=/path/to/mboo-data -jar build/libs/mboo-code-0.0.1-SNAPSH
 .mboo/
 ├── setting.json
 ├── mboo_data.sqlite
+├── cache/
+│   └── skills/
 ├── sessions/
 │   └── {sessionId}/
 │       ├── session.jsonl
 │       └── tool-results/
+├── skills/
+│   └── {skill-name}/
 └── workspaces/
     └── {date}/{sessionId}/
 ```
@@ -286,4 +292,6 @@ java -Dmboo.appDataDir=/path/to/mboo-data -jar build/libs/mboo-code-0.0.1-SNAPSH
 - SQLite 保存工作区、会话元数据、模型偏好和近期上下文
 - JSONL 保存可回放的会话事实事件
 - `tool-results` 保存工具结果和命令原始输出
+- `cache/skills` 保存从 JAR 释放的内置 Skill 脚本；指定自定义数据根目录时缓存会写入该目录
+- `skills` 是固定的用户级 Mboo Skill 来源；即使指定自定义数据根目录，仍使用 `~/.mboo/skills`
 - 未选择自定义目录的新任务会获得独立的默认工作区

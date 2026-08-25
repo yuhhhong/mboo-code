@@ -25,13 +25,14 @@ public class ChatMemorySchemaMigration {
     /**
      * 列名 -> 列定义；只追加不修改，保证对旧库幂等。
      */
-    private static final Map<String, String> CONTEXT_COLUMNS = Map.of(
-            "last_model_id", "TEXT",
-            "last_context_usage_json", "TEXT",
-            "last_context_limit", "INTEGER",
-            "last_usage_at", "TEXT",
-            "summary_updated_at", "TEXT",
-            "pending_compression_event_json", "TEXT"
+    private static final Map<String, String> CONTEXT_COLUMNS = Map.ofEntries(
+            Map.entry("retained_tool_results_json", "TEXT"),
+            Map.entry("last_model_id", "TEXT"),
+            Map.entry("last_context_usage_json", "TEXT"),
+            Map.entry("last_context_limit", "INTEGER"),
+            Map.entry("last_usage_at", "TEXT"),
+            Map.entry("summary_updated_at", "TEXT"),
+            Map.entry("pending_compression_event_json", "TEXT")
     );
 
     @Resource

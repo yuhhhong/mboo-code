@@ -31,9 +31,12 @@ dependencies {
 
     implementation("com.alibaba.fastjson2:fastjson2:2.0.62")
 
-    implementation 'dev.langchain4j:langchain4j-open-ai:1.16.3'
-    implementation 'dev.langchain4j:langchain4j:1.16.3'
-    implementation 'dev.langchain4j:langchain4j-reactor:1.16.3-beta26'
+    implementation 'dev.langchain4j:langchain4j-open-ai:1.19.0'
+    implementation 'dev.langchain4j:langchain4j:1.19.0'
+    implementation 'dev.langchain4j:langchain4j-reactor:1.19.0-beta29'
+    implementation 'dev.langchain4j:langchain4j-mcp:1.19.0-beta29'
+    implementation 'dev.langchain4j:langchain4j-skills:1.19.0-beta29'
+    implementation 'org.apache.commons:commons-compress:1.28.0'
 
     implementation 'com.baomidou:mybatis-plus-spring-boot4-starter:3.5.16'
     implementation 'org.xerial:sqlite-jdbc:3.53.2.0'

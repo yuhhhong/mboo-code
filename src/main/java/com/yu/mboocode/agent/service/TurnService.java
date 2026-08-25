@@ -20,6 +20,11 @@ import com.yu.mboocode.agent.model.Sessions;
 import com.yu.mboocode.agent.model.ToolResultArtifact;
 import com.yu.mboocode.agent.tool.ToolApprovalService;
 import com.yu.mboocode.agent.tool.event.ToolEventFormatterRegistry;
+import com.yu.mboocode.agent.skill.SkillActivationPlanRegistry;
+import com.yu.mboocode.agent.skill.SkillActivationService;
+import com.yu.mboocode.agent.skill.SkillRuntime;
+import com.yu.mboocode.agent.skill.GuardedSkillToolProvider;
+import com.yu.mboocode.agent.skill.model.SkillActivationPlan;
 import com.yu.mboocode.common.util.DateTimeUtil;
 import com.yu.mboocode.agent.tool.permission.PermissionMode;
 import com.yu.mboocode.llm.context.ContextManagementService;
@@ -79,6 +84,14 @@ public class TurnService {
     private WorkspaceService workspaceService;
     @Resource
     private SystemPromptService systemPromptService;
+    @Resource
+    private McpServerRuntime mcpServerRuntime;
+    @Resource
+    private SkillRuntime skillRuntime;
+    @Resource
+    private SkillActivationService skillActivationService;
+    @Resource
+    private SkillActivationPlanRegistry skillActivationPlanRegistry;
 
     private final Map<String, ActiveTurnRuntime> activeTurnRuntime = new ConcurrentHashMap<>();
 
@@ -172,8 +185,17 @@ public class TurnService {
             if (StrUtil.isNotBlank(previousTurnId)) {
                 log.warn("识别并接管僵尸 turn sessionId:{} previousTurnId:{} newTurnId:{}", session.getId(), previousTurnId, turnId);
             }
+            mcpServerRuntime.captureTurnSnapshot(session.getId(), turnId);
+            skillRuntime.captureTurnSnapshot(session.getId(), turnId, session.getWorkspaceId(), session.getWorkspacePath());
             return runtime;
         } catch (RuntimeException e) {
+            mcpServerRuntime.releaseTurnSnapshot(session.getId(), turnId);
+            skillRuntime.releaseTurnSnapshot(session.getId(), turnId);
+            try {
+                sessionService.clearActiveTurn(session.getId(), turnId);
+            } catch (Exception cleanupError) {
+                log.error("回滚启动失败的 turn 占用失败 sessionId:{} turnId:{}", session.getId(), turnId, cleanupError);
+            }
             activeTurnRuntime.remove(session.getId(), runtime);
             throw e;
         }
@@ -181,12 +203,13 @@ public class TurnService {
 
     public Flux<@NonNull SessionEvent> chatStream(SessionTurn sessionTurn, String userMessage, ChatRequestParameters params) {
         ActiveTurnRuntime runtime = getActiveRuntime(sessionTurn);
+        SkillActivationPlan activationPlan = skillActivationService.createPlan(sessionTurn, userMessage, params.modelName());
         SystemPromptSnapshot systemPromptSnapshot = systemPromptService.capture(sessionTurn.sessionId(), sessionTurn.workspacePath());
         ModelInfo currentModel = modelOptionService.requireModelInfo(params.modelName());
         long currentContextLimit = modelContextPreferenceService.getEffectiveContextLimit(currentModel);
         // 自动压缩和硬预算检查必须在写入 USER_MESSAGE 前完成；压缩失败时只推送压缩事件并正常结束
         ContextManagementService.ChatPreparation preparation = contextManagementService.prepareChatTurn(sessionTurn, params.modelName(),
-                currentContextLimit, userMessage, systemPromptSnapshot);
+                currentContextLimit, activationPlan.sanitizedUserMessage(), activationPlan.toolMessages(), systemPromptSnapshot);
         Flux<@NonNull SessionEvent> preludeFlux = Flux.fromIterable(preparation.events());
         if (!preparation.proceed()) {
             return preludeFlux;
@@ -256,7 +279,8 @@ public class TurnService {
                 }
             });
 
-            aiCodeService.chatStream(sessionTurn.sessionId(), userMessage, systemPromptSnapshot.runtimeEnvironment(), systemPromptSnapshot.workspaceInstructions(), params)
+            var tokenStream = aiCodeService.chatStream(sessionTurn.sessionId(), activationPlan.sanitizedUserMessage(), systemPromptSnapshot.runtimeEnvironment(),
+                            systemPromptSnapshot.workspaceInstructions(), systemPromptSnapshot.availableSkills(), params)
                     .onPartialResponseWithContext((response, context) -> { // 助手回复
                         if (cancelHandle(sink, context.streamingHandle(), runtime)) {
                             return;
@@ -327,9 +351,10 @@ public class TurnService {
                         boolean failed = toolExecution.hasFailed();
                         String resultText = toolResultText(toolExecution);
                         ToolEventFormatterRegistry.EndedFormat endedFormat = toolEventFormatterRegistry.formatEnded(request.name(), resultText, failed);
+                        String resultPreview = skillResultPreview(sessionTurn.sessionId(), request, failed, endedFormat.resultPreview());
                         ToolCallEndedPayload.ToolCallStatus status = failed ? ToolCallEndedPayload.ToolCallStatus.FAILED : ToolCallEndedPayload.ToolCallStatus.COMPLETED;
                         ToolResultArtifact artifact = toolResultStore.saveResult(sessionTurn.transcriptUri(), sessionTurn.sessionId(), sessionTurn.turnId(),
-                                assistantMessageId, request.id(), request.name(), status, resultText, endedFormat.resultPreview());
+                                assistantMessageId, request.id(), request.name(), status, resultText, resultPreview);
                         ToolCallEndedPayload payload = ToolCallEndedPayload.builder()
                                 .messageId(assistantMessageId)
                                 .toolCallId(request.id())
@@ -402,8 +427,11 @@ public class TurnService {
                             appendInterruptedMemory(sessionTurn.sessionId(), text);
                         }
                         sink.error(error);
-                    })
-                    .start();
+                    });
+            for (SessionEvent event : skillActivationService.persistPlan(sessionTurn, assistantMessageId, activationPlan)) {
+                emitEvent(sink, () -> event);
+            }
+            tokenStream.start();
         }, FluxSink.OverflowStrategy.BUFFER);
         return preludeFlux.concatWith(userMessageFlux).concatWith(assistantMessageFlux);
     }
@@ -433,6 +461,17 @@ public class TurnService {
             toolApprovalService.cancelTurn(sessionTurn.sessionId(), sessionTurn.turnId());
         } catch (Exception e) {
             log.error("清理 turn 授权请求失败 sessionId:{} turnId:{}", sessionTurn.sessionId(), sessionTurn.turnId(), e);
+        }
+        try {
+            mcpServerRuntime.releaseTurnSnapshot(sessionTurn.sessionId(), sessionTurn.turnId());
+        } catch (Exception e) {
+            log.error("释放 turn MCP 快照失败 sessionId:{} turnId:{}", sessionTurn.sessionId(), sessionTurn.turnId(), e);
+        }
+        try {
+            skillRuntime.releaseTurnSnapshot(sessionTurn.sessionId(), sessionTurn.turnId());
+            skillActivationPlanRegistry.remove(sessionTurn.sessionId(), sessionTurn.turnId());
+        } catch (Exception e) {
+            log.error("释放 turn Skill 快照失败 sessionId:{} turnId:{}", sessionTurn.sessionId(), sessionTurn.turnId(), e);
         }
         if (sessionTurn.operationType() == TurnOperationType.CHAT) {
             // 持久化本轮最后一次有效主模型 usage，供下一轮工具压薄、自动摘要和摘要模型选择
@@ -502,6 +541,25 @@ public class TurnService {
             return toolExecution.result();
         } catch (RuntimeException e) {
             return "";
+        }
+    }
+
+    private String skillResultPreview(String sessionId, ToolExecutionRequest request, boolean failed, String fallback) {
+        if (failed || !skillRuntime.isSkillTool(request.name())) return fallback;
+        try {
+            var arguments = JSON.parseObject(request.arguments());
+            String skillName = arguments == null ? null : arguments.getString("skill_name");
+            if (GuardedSkillToolProvider.READ_SKILL_RESOURCE.equals(request.name())) {
+                String resourcePath = arguments == null ? null : arguments.getString("relative_path");
+                return "已读取 Skill 资源：" + skillName + (StrUtil.isBlank(resourcePath) ? "" : "/" + resourcePath);
+            }
+            var snapshot = skillRuntime.snapshot(sessionId);
+            var descriptor = snapshot == null ? null : snapshot.skillsByName().get(skillName);
+            if (descriptor == null) return "已激活 Skill：" + skillName;
+            return "已激活 Skill：" + descriptor.name() + " · " + descriptor.source().name() + " · "
+                    + descriptor.contentHash().substring(0, Math.min(12, descriptor.contentHash().length()));
+        } catch (RuntimeException e) {
+            return fallback;
         }
     }
 

@@ -3,6 +3,8 @@ package com.yu.mboocode.llm;
 import com.yu.mboocode.agent.tool.ToolApprovalService;
 import com.yu.mboocode.agent.tool.ToolRequestValidatorRegistry;
 import com.yu.mboocode.agent.tool.permission.ToolPermissionRegistry;
+import com.yu.mboocode.agent.skill.CompositeToolProvider;
+import com.yu.mboocode.agent.skill.SkillChatRequestTransformer;
 import com.yu.mboocode.config.Setting;
 import com.yu.mboocode.llm.integration.PermissionToolExecutor;
 import com.yu.mboocode.llm.listener.ModelUsageRequestListener;
@@ -54,6 +56,10 @@ public class AiCodeServiceFactory {
     private ChatMemoryService chatMemoryService;
     @Resource
     private SystemPromptService systemPromptService;
+    @Resource
+    private CompositeToolProvider compositeToolProvider;
+    @Resource
+    private SkillChatRequestTransformer skillChatRequestTransformer;
 
     @Bean
     public ChatMemoryProvider chatMemoryProvider() {
@@ -91,10 +97,13 @@ public class AiCodeServiceFactory {
                 .systemMessageTransformer((systemMessage, invocationContext) -> {
                     // 在基础组合系统提示词后追加会话摘要；不新增第二条系统消息。
                     Object memoryId = invocationContext == null ? null : invocationContext.chatMemoryId();
-                    String summary = memoryId == null ? null : chatMemoryService.getSummaryText(String.valueOf(memoryId));
-                    return systemPromptService.appendConversationSummary(systemMessage, summary);
+                    com.yu.mboocode.llm.model.ChatMemory memory = memoryId == null ? null : chatMemoryService.getById(String.valueOf(memoryId));
+                    return systemPromptService.appendConversationState(systemMessage, memory == null ? null : memory.getSummaryText(),
+                            memory == null ? null : memory.getRetainedToolResultsJson());
                 })
+                .chatRequestTransformer(skillChatRequestTransformer::transform)
                 .tools(tools)
+                .toolProvider(compositeToolProvider.toolProvider())
                 .registerListeners(modelUsageRequestListener, modelUsageResponseListener)
                 .build();
     }

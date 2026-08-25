@@ -53,6 +53,13 @@ public class ToolEventFormatterRegistry {
             copy(arguments, safe, "format", "offset", "limit", "timeoutSeconds");
             return JSON.toJSONString(safe);
         }
+        if ("activate_skill".equals(toolName) || "read_skill_resource".equals(toolName)) {
+            JSONObject arguments = parseObject(argumentsJson);
+            if (arguments == null) return "{}";
+            Map<String, Object> safe = new LinkedHashMap<>();
+            copy(arguments, safe, "skill_name", "relative_path");
+            return JSON.toJSONString(safe);
+        }
         if (!FILE_TOOLS.contains(toolName)) return truncate(argumentsJson, 2000);
         JSONObject arguments = parseObject(argumentsJson);
         if (arguments == null) return truncate(argumentsJson, ToolTextTruncator.EVENT_RESULT_MAX_LENGTH);
@@ -82,6 +89,7 @@ public class ToolEventFormatterRegistry {
         JSONObject result = parseObject(resultText);
         String errorCode = result == null ? null : result.getString("errorCode");
         String errorMessage = result == null ? null : result.getString("message");
+        if (result != null && (errorMessage == null || errorMessage.isBlank())) errorMessage = result.getString("errorMessage");
         if ("run_command".equals(toolName) && result != null) return new EndedFormat(formatCommand(result), errorCode, errorMessage);
         if ("web_search".equals(toolName) && result != null && result.getBooleanValue("success") && result.getJSONObject("data") != null) return new EndedFormat(formatWebSearch(result), errorCode, errorMessage);
         if ("web_fetch".equals(toolName) && result != null && result.getBooleanValue("success") && result.getJSONObject("data") != null) return new EndedFormat(formatWebFetch(result), errorCode, errorMessage);

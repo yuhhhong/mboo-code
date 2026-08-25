@@ -113,6 +113,10 @@ public class ContextManagementService {
     private SessionEventStore sessionEventStore;
     @Resource
     private SystemPromptService systemPromptService;
+    @Resource
+    private ToolMemoryPolicyRegistry toolMemoryPolicyRegistry;
+    @Resource
+    private RetainedToolResultService retainedToolResultService;
 
     /**
      * 聊天执行 turn 的前置上下文处理：pending 恢复、阈值工具压薄、70% 自动压缩、新消息硬预算检查。
@@ -120,7 +124,7 @@ public class ContextManagementService {
      * @return 需要先于 USER_MESSAGE 推送的压缩事件和是否继续发送用户消息
      */
     public ChatPreparation prepareChatTurn(SessionTurn sessionTurn, String currentModelId, long currentContextLimit, String newUserMessage,
-                                           SystemPromptSnapshot systemPromptSnapshot) {
+                                           List<ChatMessage> plannedToolMessages, SystemPromptSnapshot systemPromptSnapshot) {
         restorePendingCompressionEvent(sessionTurn.sessionId(), sessionTurn.transcriptUri());
 
         ChatMemory row = chatMemoryService.getById(sessionTurn.sessionId());
@@ -135,7 +139,8 @@ public class ContextManagementService {
         long estimatedSavings = estimateThinSavings(currentModelId, messages, thinned.messages());
         long requiredSavings = minimumToolThinSavings(currentContextLimit);
         boolean forcedThin = thinned.changed() && exceedsNewMessageBudget(currentModel, currentContextLimit,
-                row == null ? null : row.getSummaryText(), messages, newUserMessage, systemPromptSnapshot);
+                row == null ? null : row.getSummaryText(), row == null ? null : row.getRetainedToolResultsJson(), messages, newUserMessage,
+                plannedToolMessages, systemPromptSnapshot);
         boolean thresholdThin = thinned.changed() && lastUsage != null
                 && reachTriggerRatio(lastUsage.totalTokens(), row.getLastContextLimit(), currentContextLimit, TOOL_THIN_TRIGGER_RATIO)
                 && estimatedSavings >= requiredSavings;
@@ -177,7 +182,8 @@ public class ContextManagementService {
                     forcedThin ? "HARD_BUDGET" : "USAGE_THRESHOLD", estimatedSavings, requiredSavings, thinned.compactedToolCallCount());
         }
 
-        checkNewMessageBudget(currentModel, currentContextLimit, row == null ? null : row.getSummaryText(), messages, newUserMessage, systemPromptSnapshot);
+        checkNewMessageBudget(currentModel, currentContextLimit, row == null ? null : row.getSummaryText(),
+                row == null ? null : row.getRetainedToolResultsJson(), messages, newUserMessage, plannedToolMessages, systemPromptSnapshot);
         return new ChatPreparation(events, true);
     }
 
@@ -268,7 +274,9 @@ public class ContextManagementService {
         String estimateModelId = summaryModel.modelId();
 
         String existingSummary = row == null ? null : row.getSummaryText();
-        long systemTokens = ContextEstimateUtil.estimateTextTokens(estimateModelId, systemPromptService.compose(systemPromptSnapshot, existingSummary));
+        String existingRetainedJson = row == null ? null : row.getRetainedToolResultsJson();
+        long systemTokens = ContextEstimateUtil.estimateTextTokens(estimateModelId,
+                systemPromptService.compose(systemPromptSnapshot, existingSummary, existingRetainedJson));
 
         // 降级顺序：先按 6 个保留（最近 4 个原始）；不足时压薄全部工具交互；再按 6、4、2、1 降低保留数量
         List<ConversationTurn> retainedTurns;
@@ -296,10 +304,13 @@ public class ContextManagementService {
 
         int summarizedCount = parsed.turns().size() - retainedCount;
         List<ConversationTurn> summarizedTurns = new ArrayList<>(normalThinned.turns().subList(0, summarizedCount));
+        RetainedExtraction retainedExtraction = extractRetainedTools(summarizedTurns);
+        RetainedToolResults retainedResults = retainedToolResultService.merge(existingRetainedJson, retainedExtraction.entries(), contextLimit, estimateModelId);
+        String retainedJson = retainedToolResultService.serialize(retainedResults);
         boolean lowReasoning = supportsLowReasoning(summaryModel);
         Long outputLimit = summaryModel.limit() == null ? null : summaryModel.limit().output();
         String newSummary = contextSummaryService.summarize(summaryModel.modelId(), outputLimit, lowReasoning,
-                existingSummary, parsed.orphanPrefix(), summarizedTurns);
+                existingSummary, parsed.orphanPrefix(), retainedExtraction.summaryTurns());
 
         if (cancelled != null && cancelled.get()) {
             // 摘要已返回但客户端已断开：不提交、不写终态，JSONL 只保留 started，回放识别为中断
@@ -312,7 +323,8 @@ public class ContextManagementService {
         }
 
         long beforeEstimatedTokens = systemTokens + ContextEstimateUtil.estimateMessagesTokens(estimateModelId, flattenTurns(parsed.turns()));
-        long afterEstimatedTokens = ContextEstimateUtil.estimateTextTokens(estimateModelId, systemPromptService.compose(systemPromptSnapshot, newSummary))
+        long afterEstimatedTokens = ContextEstimateUtil.estimateTextTokens(estimateModelId,
+                systemPromptService.compose(systemPromptSnapshot, newSummary, retainedJson))
                 + ContextEstimateUtil.estimateMessagesTokens(estimateModelId, flattenTurns(retainedTurns));
 
         SessionEvent completedEvent = buildCompressionEvent(sessionTurn, compressionId, trigger,
@@ -328,7 +340,8 @@ public class ContextManagementService {
         payload.setAfterEstimatedTokens(afterEstimatedTokens);
 
         // 原子提交：消息、摘要、旧 usage 失效和待写完成事件在一个事务内更新
-        chatMemoryService.commitCompressionSummary(sessionTurn.sessionId(), serializeMessages(newMessages), newSummary, JSON.toJSONString(completedEvent));
+        chatMemoryService.commitCompressionSummary(sessionTurn.sessionId(), serializeMessages(newMessages), newSummary, retainedJson,
+                JSON.toJSONString(completedEvent));
         aiCodeService.evictChatMemory(sessionTurn.sessionId());
 
         // 事务已提交：完成事件必须落 JSONL，失败时保留 pending 由下次会话操作补写
@@ -358,15 +371,18 @@ public class ContextManagementService {
     /**
      * 新用户消息硬预算检查：不截断、不摘要、不改写用户原文，超预算直接拒绝。
      */
-    private void checkNewMessageBudget(ModelInfo currentModel, long contextLimit, String summaryText, List<ChatMessage> historyMessages,
-                                       String newUserMessage, SystemPromptSnapshot systemPromptSnapshot) {
-        if (exceedsNewMessageBudget(currentModel, contextLimit, summaryText, historyMessages, newUserMessage, systemPromptSnapshot)) {
+    private void checkNewMessageBudget(ModelInfo currentModel, long contextLimit, String summaryText, String retainedToolResultsJson,
+                                       List<ChatMessage> historyMessages, String newUserMessage, List<ChatMessage> plannedToolMessages,
+                                       SystemPromptSnapshot systemPromptSnapshot) {
+        if (exceedsNewMessageBudget(currentModel, contextLimit, summaryText, retainedToolResultsJson, historyMessages, newUserMessage,
+                plannedToolMessages, systemPromptSnapshot)) {
             throw new ServiceException("单条用户消息或剩余上下文超过输入预算，请压缩上下文或发起新会话");
         }
     }
 
-    private boolean exceedsNewMessageBudget(ModelInfo currentModel, long contextLimit, String summaryText, List<ChatMessage> historyMessages,
-                                            String newUserMessage, SystemPromptSnapshot systemPromptSnapshot) {
+    private boolean exceedsNewMessageBudget(ModelInfo currentModel, long contextLimit, String summaryText, String retainedToolResultsJson,
+                                            List<ChatMessage> historyMessages, String newUserMessage, List<ChatMessage> plannedToolMessages,
+                                            SystemPromptSnapshot systemPromptSnapshot) {
         long outputReserve = currentModel.limit().output() == null
                 ? MAX_OUTPUT_RESERVE_TOKENS
                 : Math.min(currentModel.limit().output(), MAX_OUTPUT_RESERVE_TOKENS);
@@ -374,9 +390,10 @@ public class ContextManagementService {
         if (available <= 0) {
             return false;
         }
-        long estimated = ContextEstimateUtil.estimateTextTokens(currentModel.modelId(), systemPromptService.compose(systemPromptSnapshot, summaryText))
+        long estimated = ContextEstimateUtil.estimateTextTokens(currentModel.modelId(), systemPromptService.compose(systemPromptSnapshot, summaryText, retainedToolResultsJson))
                 + ContextEstimateUtil.estimateMessagesTokens(currentModel.modelId(), withoutSystemMessages(historyMessages))
-                + ContextEstimateUtil.estimateTextTokens(currentModel.modelId(), newUserMessage);
+                + ContextEstimateUtil.estimateTextTokens(currentModel.modelId(), newUserMessage)
+                + ContextEstimateUtil.estimateMessagesTokens(currentModel.modelId(), plannedToolMessages);
         return estimated > available;
     }
 
@@ -529,6 +546,13 @@ public class ContextManagementService {
                     log.warn("历史工具组配对不完整，保留原文 toolCallIds:{}", expectedIds);
                     return new ThinTurnResult(turn, 0);
                 }
+                List<ToolCallGroup> toolGroups = pairToolGroups(requests, results);
+                if (toolGroups.stream().anyMatch(group -> !toolMemoryPolicyRegistry.policy(group.request().name()).shouldThin(group))) {
+                    out.add(message);
+                    out.addAll(results);
+                    i = j - 1;
+                    continue;
+                }
                 boolean allConcluded = results.stream().allMatch(item -> memoryToolConclusionFormatter.isMemoryConclusion(item.text()));
                 if (allConcluded) {
                     out.add(message);
@@ -568,6 +592,91 @@ public class ContextManagementService {
 
     private ConversationTurn rebuildTurn(List<ChatMessage> messages) {
         return ChatMemoryTurnParser.parse(messages).turns().getFirst();
+    }
+
+    /**
+     * 从待摘要历史中移除 shouldSummarize=false 的请求/结果对，并把需要跨摘要保留的成功结果转换为版本化条目。
+     */
+    private RetainedExtraction extractRetainedTools(List<ConversationTurn> turns) {
+        List<ConversationTurn> summaryTurns = new ArrayList<>();
+        List<RetainedToolResult> entries = new ArrayList<>();
+        for (ConversationTurn turn : turns) {
+            List<ChatMessage> messages = turn.messages();
+            List<ChatMessage> out = new ArrayList<>();
+            boolean changed = false;
+            for (int i = 0; i < messages.size(); i++) {
+                ChatMessage message = messages.get(i);
+                if (!(message instanceof AiMessage aiMessage) || !aiMessage.hasToolExecutionRequests()) {
+                    out.add(message);
+                    continue;
+                }
+                List<ToolExecutionRequest> requests = aiMessage.toolExecutionRequests();
+                Set<String> expectedIds = requests.stream().map(ToolExecutionRequest::id).collect(java.util.stream.Collectors.toSet());
+                List<ToolExecutionResultMessage> results = new ArrayList<>();
+                int j = i + 1;
+                while (j < messages.size() && messages.get(j) instanceof ToolExecutionResultMessage result && expectedIds.contains(result.id())) {
+                    results.add(result);
+                    j++;
+                }
+                if (results.size() != requests.size()) {
+                    out.add(message);
+                    continue;
+                }
+                Map<String, ToolExecutionResultMessage> resultsById = new java.util.LinkedHashMap<>();
+                results.forEach(result -> resultsById.put(result.id(), result));
+                List<ToolExecutionRequest> summarizedRequests = new ArrayList<>();
+                List<ToolExecutionResultMessage> summarizedResults = new ArrayList<>();
+                for (ToolExecutionRequest request : requests) {
+                    ToolExecutionResultMessage result = resultsById.get(request.id());
+                    ToolCallGroup group = new ToolCallGroup(request, result);
+                    ToolMemoryPolicy policy = toolMemoryPolicyRegistry.policy(request.name());
+                    if (policy.shouldSummarize(group)) {
+                        summarizedRequests.add(request);
+                        summarizedResults.add(result);
+                        continue;
+                    }
+                    changed = true;
+                    String retentionKey = policy.retentionKey(group);
+                    if (retentionKey != null && !Boolean.TRUE.equals(result.isError()) && result.attributes().get("activated_skill") instanceof String) {
+                        entries.add(toRetainedToolResult(group, retentionKey));
+                    }
+                }
+                if (!summarizedRequests.isEmpty()) {
+                    out.add(aiMessage.toBuilder().toolExecutionRequests(summarizedRequests).build());
+                    out.addAll(summarizedResults);
+                } else if (StrUtil.isNotBlank(aiMessage.text())) {
+                    out.add(AiMessage.from(aiMessage.text()));
+                }
+                i = j - 1;
+            }
+            summaryTurns.add(changed ? rebuildTurn(out) : turn);
+        }
+        return new RetainedExtraction(summaryTurns, entries);
+    }
+
+    private RetainedToolResult toRetainedToolResult(ToolCallGroup group, String retentionKey) {
+        Map<String, Object> arguments;
+        try {
+            arguments = new java.util.LinkedHashMap<>(JSON.parseObject(group.request().arguments()));
+        } catch (RuntimeException e) {
+            arguments = Map.of();
+        }
+        Map<String, Object> attributes = new java.util.LinkedHashMap<>(group.result().attributes());
+        Object createdAt = attributes.get("skill_activated_at");
+        return new RetainedToolResult(group.request().name(), retentionKey, arguments, group.result().text(), attributes,
+                stringAttribute(attributes, "skill_source"), stringAttribute(attributes, "content_hash"),
+                createdAt instanceof String value ? value : DateTimeUtil.now());
+    }
+
+    private String stringAttribute(Map<String, Object> attributes, String name) {
+        Object value = attributes.get(name);
+        return value instanceof String text ? text : null;
+    }
+
+    private List<ToolCallGroup> pairToolGroups(List<ToolExecutionRequest> requests, List<ToolExecutionResultMessage> results) {
+        Map<String, ToolExecutionResultMessage> resultsById = new java.util.LinkedHashMap<>();
+        results.forEach(result -> resultsById.put(result.id(), result));
+        return requests.stream().map(request -> new ToolCallGroup(request, resultsById.get(request.id()))).toList();
     }
 
     private int countConcludedToolCalls(List<ConversationTurn> turns) {
@@ -670,5 +779,8 @@ public class ContextManagementService {
     }
 
     private record ThinTurnResult(ConversationTurn turn, int compactedToolCallCount) {
+    }
+
+    private record RetainedExtraction(List<ConversationTurn> summaryTurns, List<RetainedToolResult> entries) {
     }
 }

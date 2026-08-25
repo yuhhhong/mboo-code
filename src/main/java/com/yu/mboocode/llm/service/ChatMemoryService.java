@@ -87,12 +87,14 @@ public class ChatMemoryService extends ServiceImpl<ChatMemoryMapper, ChatMemory>
      * 摘要成功后的原子提交：消息、摘要、旧 usage 失效、摘要时间和待写完成事件在一个事务内更新。
      */
     @Transactional
-    public void commitCompressionSummary(String memoryId, String messagesJson, String summaryText, String pendingCompletedEventJson) {
+    public void commitCompressionSummary(String memoryId, String messagesJson, String summaryText, String retainedToolResultsJson,
+                                         String pendingCompletedEventJson) {
         String now = DateTimeUtil.now();
         boolean updated = lambdaUpdate()
                 .eq(ChatMemory::getMemoryId, memoryId)
                 .set(ChatMemory::getMessagesJson, messagesJson)
                 .set(ChatMemory::getSummaryText, summaryText)
+                .set(ChatMemory::getRetainedToolResultsJson, retainedToolResultsJson)
                 .set(ChatMemory::getLastContextUsageJson, null)
                 .set(ChatMemory::getLastUsageAt, null)
                 .set(ChatMemory::getSummaryUpdatedAt, now)
@@ -104,6 +106,7 @@ public class ChatMemoryService extends ServiceImpl<ChatMemoryMapper, ChatMemory>
             chatMemory.setMemoryId(memoryId);
             chatMemory.setMessagesJson(messagesJson);
             chatMemory.setSummaryText(summaryText);
+            chatMemory.setRetainedToolResultsJson(retainedToolResultsJson);
             chatMemory.setSummaryUpdatedAt(now);
             chatMemory.setPendingCompressionEventJson(pendingCompletedEventJson);
             chatMemory.setUpdatedAt(now);
@@ -129,5 +132,13 @@ public class ChatMemoryService extends ServiceImpl<ChatMemoryMapper, ChatMemory>
     public String getSummaryText(String memoryId) {
         ChatMemory chatMemory = getById(memoryId);
         return chatMemory == null ? null : chatMemory.getSummaryText();
+    }
+
+    /**
+     * 读取上下文保留工具结果，供系统消息转换器和 Skill 资源读取校验使用。
+     */
+    public String getRetainedToolResultsJson(String memoryId) {
+        ChatMemory chatMemory = getById(memoryId);
+        return chatMemory == null ? null : chatMemory.getRetainedToolResultsJson();
     }
 }

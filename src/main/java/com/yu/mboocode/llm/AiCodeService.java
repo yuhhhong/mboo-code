@@ -17,5 +17,6 @@ import dev.langchain4j.service.memory.ChatMemoryAccess;
 public interface AiCodeService extends ChatMemoryAccess {
     @SystemMessage(fromResource = "prompt/system-prompt.txt")
     TokenStream chatStream(@MemoryId String memoryId, @UserMessage String message, @V("runtimeEnvironment") String runtimeEnvironment,
-                           @V("workspaceInstructions") String workspaceInstructions, ChatRequestParameters params);
+                           @V("workspaceInstructions") String workspaceInstructions, @V("availableSkills") String availableSkills,
+                           ChatRequestParameters params);
 }

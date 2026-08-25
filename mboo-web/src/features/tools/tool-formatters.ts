@@ -9,6 +9,8 @@ const TOOL_LABELS: Record<string, string> = {
   run_command: "执行命令",
   web_search: "网络搜索",
   web_fetch: "网页抓取",
+  activate_skill: "激活 Skill",
+  read_skill_resource: "读取 Skill 资源",
 };
 
 export function getToolLabel(toolName: string) {

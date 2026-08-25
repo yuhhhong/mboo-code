@@ -3,7 +3,7 @@ package com.yu.mboocode.config;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONWriter;
-import com.yu.mboocode.common.util.CommonUtil;
+import com.yu.mboocode.common.util.AppDataPaths;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,9 +19,9 @@ public class SettingConfig {
 
     @Bean
     public Setting setting() {
-        Path settingPath = Path.of(CommonUtil.getAppDataDir(), SETTING_FILE_NAME);
+        Path settingPath = AppDataPaths.root().resolve(SETTING_FILE_NAME);
 
-        // CommonUtil.getAppDataDir() 目录在启动项目时创建，这里不用考虑不存在
+        // 应用数据目录在启动项目时创建，这里不用考虑不存在
 
         if (Files.notExists(settingPath)) {
             writeDefaultSetting(settingPath, Setting.defaultSetting());

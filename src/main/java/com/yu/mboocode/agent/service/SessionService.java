@@ -13,7 +13,7 @@ import com.yu.mboocode.agent.model.SessionEvent;
 import com.yu.mboocode.agent.model.Sessions;
 import com.yu.mboocode.agent.model.Workspace;
 import com.yu.mboocode.common.exception.ServiceException;
-import com.yu.mboocode.common.util.CommonUtil;
+import com.yu.mboocode.common.util.AppDataPaths;
 import com.yu.mboocode.common.util.DateTimeUtil;
 import com.yu.mboocode.llm.service.PersistentChatMemoryStore;
 import com.yu.mboocode.agent.tool.permission.PermissionMode;
@@ -421,7 +421,7 @@ public class SessionService extends ServiceImpl<SessionsMapper, Sessions> {
 
     private String createDefaultWorkspace(String sessionId, LocalDate date) {
         try {
-            Path workspacePath = Path.of(CommonUtil.getAppDataDir(), "workspaces", date.toString(), sessionId).toAbsolutePath().normalize();
+            Path workspacePath = AppDataPaths.root().resolve("workspaces").resolve(date.toString()).resolve(sessionId).toAbsolutePath().normalize();
             Files.createDirectories(workspacePath);
             return workspacePath.toString();
         } catch (IOException | InvalidPathException e) {

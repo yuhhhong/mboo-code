@@ -10,6 +10,7 @@ import type {
   PermissionMode,
 } from "@/lib/session-types";
 import styles from "./task-composer.module.css";
+import { ComposerTokenEditor } from "./composer-token-editor";
 
 export const MANUAL_MODEL_VALUE = "__manual__";
 
@@ -64,6 +65,7 @@ export type TaskComposerProps = {
   isSavingPermissionMode: boolean;
   permissionModeError: string;
   workspacePath: string;
+  workspaceId?: string | null;
   workspaceStatusText: string;
   canSelectWorkspace: boolean;
   canClearWorkspace: boolean;
@@ -107,6 +109,7 @@ export const TaskComposer = memo(function TaskComposer({
   isSavingPermissionMode,
   permissionModeError,
   workspacePath,
+  workspaceId,
   workspaceStatusText,
   canSelectWorkspace,
   canClearWorkspace,
@@ -270,23 +273,7 @@ export const TaskComposer = memo(function TaskComposer({
           <span className={styles.toolbarHint}>{isRunning ? "生成中，Esc 可停止" : isCompressing ? "上下文压缩中" : "Enter 发送 · Shift+Enter 换行"}</span>
         </div>
         <label className="sr-only" htmlFor="task-input">任务输入</label>
-        <div className={styles.editor}>
-          <textarea
-            className={styles.textarea}
-            id="task-input"
-            disabled={controlsDisabled}
-            placeholder="写下任务目标…"
-            value={input}
-            onChange={(event) => onInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                if (event.shiftKey || event.nativeEvent.isComposing) return;
-                event.preventDefault();
-                submit();
-              }
-            }}
-          />
-        </div>
+        <ComposerTokenEditor id="task-input" value={input} disabled={controlsDisabled} workspaceId={workspaceId} placeholder="写下任务目标… 输入 / 选择 Skill" onChange={onInputChange} onSubmit={submit} />
         <div className={styles.statusbar}>
           <span className={styles.statusText}>{workspaceLabel}{modelName.trim() ? ` · ${modelName.trim()}` : ""}</span>
           <div className={styles.statusActions}>
