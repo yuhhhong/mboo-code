@@ -2414,7 +2414,7 @@ export default function Home() {
                   {isSessionSwitching ? (
                     <ConversationLoadingState />
                   ) : (
-                    <div className={`${layoutStyles.emptyStatePanel} mx-auto w-full max-w-[46rem] px-4 py-5 sm:px-5 sm:py-6`}>
+                    <div className={`${layoutStyles.emptyStatePanel} mx-auto w-full max-w-[72rem] px-4 py-5 sm:px-5 sm:py-6`}>
                       {/* 设计决策：缺模型只在输入器保留一个主阻断；空态只给下一步与示例 */}
                       <div className="flex items-center gap-3">
                         <span aria-hidden className="mboo-avatar-m size-12 rounded-[12px] border border-line text-xl">
@@ -2526,15 +2526,15 @@ export default function Home() {
               ) : null}
             </div>
 
-            <div className={`${layoutStyles.composerDock} px-3 sm:px-4 min-[1440px]:px-0`}>
+            <div className={`${layoutStyles.composerDock} px-3 sm:px-4 xl:px-6`}>
               {isArchivedView ? (
-                <div className="mx-auto max-w-[46rem] rounded-[var(--radius-sm)] border border-running/30 bg-running-soft px-4 py-3 text-sm text-running">
+                <div className="mx-auto w-full max-w-[72rem] rounded-[var(--radius-sm)] border border-running/30 bg-running-soft px-4 py-3 text-sm text-running">
                   当前为归档会话，仅支持回看。可在会话列表中取消归档后继续对话。
                 </div>
               ) : (
                 <>
                   {pendingApprovalTools.length > 0 ? (
-                    <div className={`${layoutStyles.approvalStack} mx-auto mb-2 w-full max-w-[46rem] space-y-2`}>
+                    <div className={`${layoutStyles.approvalStack} mx-auto mb-2 w-full max-w-[72rem] space-y-2`}>
                       {pendingApprovalTools.map((toolCall) => (
                         <ToolApprovalCard
                           key={toolCall.approvalId || toolCall.id}

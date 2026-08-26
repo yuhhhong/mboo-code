@@ -38,7 +38,7 @@
 
 .content {
   position: relative;
-  width: min(100%, 736px);
+  width: min(100%, 72rem);
   min-height: 100%;
   margin: 0 auto;
 }
@@ -65,7 +65,7 @@
 
 .runningDock > * {
   pointer-events: auto;
-  width: min(100%, 736px);
+  width: min(100%, 72rem);
   margin: 0 auto;
 }
 
@@ -141,6 +141,6 @@
 
 @media (min-width: 1440px) {
   .scroller {
-    padding-inline: 0;
+    padding-inline: 24px;
   }
 }

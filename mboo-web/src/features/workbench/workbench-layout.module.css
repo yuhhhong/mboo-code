@@ -1,11 +1,10 @@
 .shell {
   display: flex;
   width: 100%;
-  max-width: 1440px;
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  margin: 0 auto;
+  margin: 0;
   overflow: hidden;
   background: #fff;
 }
@@ -170,12 +169,6 @@
 
   .gridSidebarCollapsed {
     grid-template-columns: minmax(0, 1fr) 210px;
-  }
-}
-
-@media (max-width: 1179px) {
-  .shell {
-    max-width: none;
   }
 }
 

@@ -1,7 +1,7 @@
 .form {
   position: relative;
   z-index: 1000;
-  width: min(100%, 736px);
+  width: 100%;
   min-width: 0;
   margin: 0 auto;
   display: flex;
