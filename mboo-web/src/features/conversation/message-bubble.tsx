@@ -67,13 +67,14 @@ export const MessageBubble = memo(function MessageBubble({
             {message.state ? <span className="text-[11px] text-text-3" role="status">{formatMessageState(message.state)}</span> : null}
             {message.createdAt ? <span className="text-[11px] text-text-3">{formatSessionTime(message.createdAt)}</span> : null}
           </div>
-          <div className="min-w-0 space-y-2 text-text-1">
+          {/* 段间节奏由 styles.body 统一掌控；不要再用 Tailwind space-y-*，它的 margin 会与段间 margin 折叠。 */}
+          <div className={`min-w-0 ${styles.body} text-text-1`}>
             {segments ? (
               segments.map((segment, segmentIndex) => {
                 if (segment.type === "text") {
                   if (!segment.text && message.state !== "streaming") return null;
                   return (
-                    <div key={segment.id} className={styles.segment}>
+                    <div key={segment.id} className={`${styles.segment} ${styles.segmentText}`}>
                       <AssistantMarkdown
                         content={segment.text}
                         messageId={`${message.id}:${segment.id}`}
@@ -83,7 +84,7 @@ export const MessageBubble = memo(function MessageBubble({
                   );
                 }
                 return (
-                  <div key={`tool-group-${segment.id}`} className={styles.segment}>
+                  <div key={`tool-group-${segment.id}`} className={`${styles.segment} ${styles.segmentTools}`}>
                     <ToolTrace
                       toolCalls={segment.toolCalls}
                       sessionId={sessionId}

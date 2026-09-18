@@ -16,6 +16,7 @@ import styles from "./session-list-panel.module.css";
 import { memo, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useSessionRuntimeStore } from "@/lib/session-runtime-store";
+import { parseUserMessageContent } from "@/lib/user-message-content";
 import type {
   SessionConfirmAction,
   SessionInfo,
@@ -594,6 +595,8 @@ const SessionRow = memo(function SessionRow({
     }
     onConfirmActionChange({ type: "delete", id: session.id });
   };
+  const displayTitle = sessionListTitle(session, preview);
+  const titleSegments = parseUserMessageContent(displayTitle);
 
   return (
     <div
@@ -616,14 +619,19 @@ const SessionRow = memo(function SessionRow({
         <>
           <div className={styles.sessionMainRow}>
             <button
-              aria-label={`${sessionListTitle(session, preview)}${isCurrentSessionRunning ? "，正在处理" : ""}`}
+              aria-label={`${displayTitle}${isCurrentSessionRunning ? "，正在处理" : ""}`}
               className={styles.sessionOpenButton}
               disabled={actionDisabled}
               type="button"
               onClick={onOpen}
             >
               <span className={styles.sessionCopy}>
-                <span className={styles.sessionTitle}>{sessionListTitle(session, preview)}</span>
+                <span className={styles.sessionTitle}>
+                  {titleSegments.map((segment, index) => segment.type === "skill" ? (
+                    // 列表 Skill 标识：固定约 56px（原标识宽度 +20px），名称超出省略，全名交给悬停提示。
+                    <span key={`skill-${segment.name}-${index}`} className="mr-1 inline-block max-w-14 overflow-hidden text-ellipsis whitespace-nowrap rounded-[3px] bg-accent/10 px-1 py-px align-middle text-[10px] font-medium leading-3 text-accent" title={`Skill：${segment.name}`}><span aria-hidden className="text-text-3">/</span>{segment.name}</span>
+                  ) : <span key={`text-${index}`}>{segment.text}</span>)}
+                </span>
                 <span className={styles.sessionMeta}>
                   {isCurrentSessionRunning ? (
                     <span className={styles.sessionRunningStatus} data-session-status aria-live="polite">
@@ -640,7 +648,7 @@ const SessionRow = memo(function SessionRow({
               aria-controls={isMenuOpen ? menuId : undefined}
               aria-expanded={isMenuOpen}
               aria-haspopup="menu"
-              aria-label={`${sessionListTitle(session, preview)}的更多操作`}
+              aria-label={`${displayTitle}的更多操作`}
               className={styles.menuTrigger}
               disabled={actionDisabled}
               type="button"
@@ -654,7 +662,7 @@ const SessionRow = memo(function SessionRow({
               <div
                 ref={menuRef}
                 id={menuId}
-                aria-label={`${sessionListTitle(session, preview)}的操作菜单`}
+                aria-label={`${displayTitle}的操作菜单`}
                 className={styles.sessionMenu}
                 role="menu"
                 style={menuPosition}

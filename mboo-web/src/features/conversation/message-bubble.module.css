@@ -1,8 +1,53 @@
+/* 消息正文容器：节奏在这里统一掌控。
+   此前用 Tailwind space-y-2（给兄弟节点加 margin），相邻兄弟的 margin 会互相折叠，
+   "说↔做"的额外间距永远被吃掉，改完看不出变化。所以这里改为在同一个 margin 通道上
+   直接给最终值：同类延续 12px，说↔做 的转换 20px。 */
+.body > * + * {
+  margin-top: 12px;
+}
+
+/* 段：一段连续表达，或一组工具调用。 */
 .segment {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  min-width: 0;
   animation: message-segment-arrive 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 文本段：字号/行高由全局 .mboo-markdown（15px / 1.75）负责，这里只补"段落呼吸"。
+   段落间距从全局 0.42em（约 6.3px）提到 0.9em（约 13.5px），让"一段完整表达"的边界肉眼可分。 */
+.segmentText :global(.mboo-markdown p),
+.segmentText :global(.mboo-markdown ul),
+.segmentText :global(.mboo-markdown ol) {
+  margin: 0.9em 0;
+}
+
+/* 列表项之间：全局 0.18em（约 2.7px）几乎贴在一起，提到 0.42em（约 6.3px）。 */
+.segmentText :global(.mboo-markdown li + li) {
+  margin-top: 0.42em;
+}
+
+/* 首末块去外边距：段外的间距已由 .body 统一给，段内首尾不能再叠一层，否则会双倍留白。 */
+.segmentText :global(.mboo-markdown > *:first-child),
+.segmentText :global(.markstream-react > *:first-child) {
+  margin-top: 0;
+}
+
+.segmentText :global(.mboo-markdown > *:last-child),
+.segmentText :global(.markstream-react > *:last-child) {
+  margin-bottom: 0;
+}
+
+/* 工具段：ToolTrace 自带完整卡片容器，这里不再叠加任何装饰，
+   否则就是"卡片套卡片"。段与段之间由 .body 的 margin 通道负责隔离。 */
+.segmentTools {
+  min-width: 0;
+}
+
+/* 段间节奏分层：同类延续 12px；"说"↔"做" 的转换 20px，让「从说到做」的转折读得出来。 */
+.body > .segmentText + .segmentTools,
+.body > .segmentTools + .segmentText {
+  margin-top: 20px;
 }
 
 .messageImpact {
